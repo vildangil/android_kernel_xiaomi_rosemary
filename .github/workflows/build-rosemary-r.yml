@@ -50,7 +50,7 @@ jobs:
           echo "$PWD/../clang/bin" >> "$GITHUB_PATH"
 
       - name: Integrate ReSukiSU
-        if: inputs.variant != 'stock'
+        if: (inputs.variant || 'stock') != 'stock'
         run: |
           set -euxo pipefail
           curl -LSs https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh | bash
@@ -59,7 +59,7 @@ jobs:
           git apply /tmp/resukisu-hooks.patch
 
       - name: Integrate NoMount
-        if: inputs.variant == 'resukisu_nomount'
+        if: (inputs.variant || 'stock') == 'resukisu_nomount'
         run: |
           set -euxo pipefail
           git clone --depth=1 https://github.com/Bouteillepleine/NoMount-Suite.git /tmp/nomount-suite
