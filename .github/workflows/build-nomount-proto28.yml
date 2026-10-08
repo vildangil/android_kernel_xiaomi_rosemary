@@ -69,8 +69,8 @@ jobs:
           changed = 0
           for line in old_sums.splitlines():
               parts = line.split("  ", 1)
-              if len(parts) == 2 and parts[1] == nm_path:
-                  line = hashlib.sha256(nm).hexdigest() + "  " + nm_path
+              if len(parts) == 2 and parts[1].removeprefix("./") == nm_path:
+                  line = hashlib.sha256(nm).hexdigest() + "  " + parts[1]
                   changed += 1
               new_lines.append(line)
           assert changed == 1, "Expected exactly one nm checksum entry"
