@@ -77,7 +77,17 @@
 
 #define GF_LINUX_VERSION "V1.01.04"
 
-#define GF_NETLINK_ROUTE 29   /* for GF test temporary, need defined in include/uapi/linux/netlink.h */
+/*
+ * The NoMount engine owns netlink protocol 29 when CONFIG_NOMOUNT is enabled.
+ * Goodix must use a different protocol, otherwise gf_netlink_init() fails
+ * and the fingerprint driver's probe is aborted.
+ * The Goodix userspace HAL obtains this number through GF_IOC_INIT.
+ */
+#ifdef CONFIG_NOMOUNT
+#define GF_NETLINK_ROUTE 30
+#else
+#define GF_NETLINK_ROUTE 29
+#endif
 #define MAX_NL_MSG_LEN 16
 
 #define COMPATIBLE_NODE "mediatek,fpsensor_fp_eint"
