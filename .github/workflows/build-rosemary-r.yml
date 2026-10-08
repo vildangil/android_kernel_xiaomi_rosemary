@@ -9,12 +9,14 @@ on:
       variant:
         description: Build variant
         required: true
-        default: resukisu_nomount
+        default: bakasu_susfs
         type: choice
         options:
           - stock
           - resukisu
           - resukisu_nomount
+          - bakasu_susfs
+          - bakasu_susfs_nomount
       localversion:
         description: Extra LOCALVERSION suffix
         required: false
@@ -49,17 +51,31 @@ jobs:
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ../clang
           echo "$PWD/../clang/bin" >> "$GITHUB_PATH"
 
-      - name: Integrate ReSukiSU
+      - name: Integrate BakaSU manual hooks
         if: (inputs.variant || 'stock') != 'stock'
         run: |
           set -euxo pipefail
-          curl -LSs https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh | bash
-          curl -LSs https://raw.githubusercontent.com/vildangil/kernel_builder/Rosemary/ksu/hooks/test_resukisu_hooks.patch -o /tmp/resukisu-hooks.patch
-          git apply --check /tmp/resukisu-hooks.patch
-          git apply /tmp/resukisu-hooks.patch
+          curl -fLSs https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh -o /tmp/bakasu-setup.sh
+          bash /tmp/bakasu-setup.sh
+          test -f drivers/kernelsu/Kconfig
+          grep -q 'CONFIG_KSU' drivers/Makefile
+          git apply --check .github/patches/bakasu-manual-hooks-4.14.patch
+          git apply .github/patches/bakasu-manual-hooks-4.14.patch
+
+      - name: Integrate SUSFS 2.3.0 from Evolution patch
+        if: contains(inputs.variant, 'susfs')
+        run: |
+          set -euxo pipefail
+          # Fail on rejects, don't silently claim a working SUSFS port.
+          git apply --check .github/patches/susfs-2.3.0-evolution.patch
+          git apply .github/patches/susfs-2.3.0-evolution.patch
+          test -s fs/susfs.c
+          test -s include/linux/susfs.h
+          test -s include/linux/susfs_def.h
+
 
       - name: Integrate NoMount
-        if: (inputs.variant || 'stock') == 'resukisu_nomount'
+        if: contains(inputs.variant, 'nomount')
         run: |
           set -euxo pipefail
           git clone --depth=1 https://github.com/Bouteillepleine/NoMount-Suite.git /tmp/nomount-suite
@@ -76,10 +92,17 @@ jobs:
           make O=out ARCH=arm64 "$DEFCONFIG"
 
           if [[ "${{ inputs.variant || 'stock' }}" != "stock" ]]; then
-            scripts/config --file out/.config -e KSU -e KSU_MANUAL_HOOK
+            scripts/config --file out/.config -e KSU -e KSU_MANUAL_HOOK -e KALLSYMS -e DEBUG_KERNEL -e KALLSYMS_ALL
           fi
 
-          if [[ "${{ inputs.variant || 'stock' }}" == "resukisu_nomount" ]]; then
+          if [[ "${{ inputs.variant || 'stock' }}" == *susfs* ]]; then
+            scripts/config --file out/.config -d KSU_MANUAL_HOOK -e KSU_SUSFS
+            for opt in KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
+              scripts/config --file out/.config -e "$opt"
+            done
+          fi
+
+          if [[ "${{ inputs.variant || 'stock' }}" == *nomount* ]]; then
             scripts/config --file out/.config -e NOMOUNT
           fi
 
@@ -89,7 +112,21 @@ jobs:
 
           make O=out ARCH=arm64 olddefconfig
           echo "===== important config ====="
-          grep -E 'CONFIG_(KSU|KSU_MANUAL_HOOK|NOMOUNT|LOCALVERSION)=' out/.config || true
+          grep -E 'CONFIG_(KSU|KSU_MANUAL_HOOK|KSU_SUSFS|NOMOUNT|KALLSYMS_ALL|LOCALVERSION)=' out/.config || true
+          if [[ "${{ inputs.variant || 'stock' }}" != "stock" ]]; then
+            grep -qx 'CONFIG_KSU=y' out/.config
+            grep -qx 'CONFIG_KALLSYMS_ALL=y' out/.config
+          fi
+          if [[ "${{ inputs.variant || 'stock' }}" == *susfs* ]]; then
+            grep -qx 'CONFIG_KSU_SUSFS=y' out/.config
+          else
+            if [[ "${{ inputs.variant || 'stock' }}" != "stock" ]]; then
+              grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' out/.config
+            fi
+          fi
+          if [[ "${{ inputs.variant || 'stock' }}" == *nomount* ]]; then
+            grep -qx 'CONFIG_NOMOUNT=y' out/.config
+          fi
 
       - name: Build kernel
         run: |
