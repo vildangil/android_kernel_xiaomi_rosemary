@@ -912,10 +912,9 @@ index c62a87e..a344469 100644
  {
  	struct inotify_inode_mark *inode_mark;
  	struct inode *inode;
-@@ -83,6 +106,60 @@ static void inotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)
- 	inode_mark = container_of(mark, struct inotify_inode_mark, fsn_mark);
- 	inode = igrab(mark->connector->inode);
- 	if (inode) {
+@@ -91,4 +91,58 @@
+ 		 */
+ 		u32 mask = mark->mask & IN_ALL_EVENTS;
 +#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 +		if (susfs_is_current_app_uid()) {
 +			bool is_fuse = false;
@@ -923,9 +922,9 @@ index c62a87e..a344469 100644
 +				unsigned long ino = inode->i_ino;
 +				dev_t dev = inode->i_sb->s_dev;
 +				susfs_sus_kstat_spoof_inotify_fdinfo(&ino, &dev);
-+				seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:0 ",
++				seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:%x ",
 +						inode_mark->wd, ino, dev,
-+						inotify_mark_user_mask(mark));
++						mask, mark->ignored_mask);
 +				show_mark_fhandle(m, inode);
 +				seq_putc(m, '\n');
 +				iput(inode);
@@ -953,9 +952,9 @@ index c62a87e..a344469 100644
 +				if (!d_backing_inode(path.dentry)) {
 +					goto out_path_put;
 +				}
-+				seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:0 ",
++				seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:%x ",
 +						inode_mark->wd, d_backing_inode(path.dentry)->i_ino, d_backing_inode(path.dentry)->i_sb->s_dev,
-+						inotify_mark_user_mask(mark));
++						mask, mark->ignored_mask);
 +				show_mark_fhandle(m, d_backing_inode(path.dentry));
 +				seq_putc(m, '\n');
 +				path_put(&path);
@@ -970,9 +969,8 @@ index c62a87e..a344469 100644
 +		}
 +orig_flow:
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
- 		seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:0 ",
+ 		seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:%x ",
  			   inode_mark->wd, inode->i_ino, inode->i_sb->s_dev,
- 			   inotify_mark_user_mask(mark));
 diff --git a/fs/proc/base.c b/fs/proc/base.c
 index 0495111..e86c03f 100644
 --- a/fs/proc/base.c
@@ -1153,18 +1151,15 @@ diff --git a/fs/proc/task_mmu.c b/fs/proc/task_mmu.c
 index 1347939..5c594b9 100644
 --- a/fs/proc/task_mmu.c
 +++ b/fs/proc/task_mmu.c
-@@ -20,6 +20,9 @@
- #include <linux/uaccess.h>
+@@ -21,4 +21,7 @@
  #include <linux/mm_inline.h>
- #include <linux/ctype.h>
+ 
 +#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 +#include <linux/susfs_def.h>
 +#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
- 
  #include <asm/elf.h>
  #include <asm/tlb.h>
-@@ -349,6 +352,14 @@ static void show_vma_header_prefix(struct seq_file *m,
- 		   MAJOR(dev), MINOR(dev), ino);
+@@ -358,4 +358,12 @@
  }
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
@@ -1176,8 +1171,7 @@ index 1347939..5c594b9 100644
 +#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 +
  static void
- show_map_vma(struct seq_file *m, struct vm_area_struct *vma, int is_pid)
- {
+ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 @@ -363,9 +374,36 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma, int is_pid)
  
  	if (file) {
@@ -1215,34 +1209,16 @@ index 1347939..5c594b9 100644
  	}
  
  	start = vma->vm_start;
-@@ -831,6 +869,11 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
- 		mss = &mss_stack;
- 	}
+@@ -866,4 +866,9 @@
+ 	struct mem_size_stats mss;
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MAP
 +	if (vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
 +		return 0;
 +#endif
 +
- 	smaps_walk.private = mss;
+ 	memset(&mss, 0, sizeof(mss));
  
- #ifdef CONFIG_SHMEM
-@@ -892,7 +935,6 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
- 			   vma_kernel_pagesize(vma) >> 10,
- 			   vma_mmu_pagesize(vma) >> 10);
- 
--
- 	if (!rollup_mode || last_vma)
- 		seq_printf(m,
- 			   "Rss:            %8lu kB\n"
-@@ -932,6 +974,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
- 		arch_show_smap(m, vma);
- 		show_smap_vma_flags(m, vma);
- 	}
-+
- 	m_cache_vma(m, vma);
- 	return ret;
- }
 @@ -1618,6 +1661,9 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
  	while (count && (start_vaddr < end_vaddr)) {
  		int len;
@@ -4172,8 +4148,7 @@ diff --git a/kernel/sys.c b/kernel/sys.c
 index 30801ea..0fd8fad 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
-@@ -1182,12 +1182,20 @@ static int override_release(char __user *release, size_t len)
- 	return ret;
+@@ -1208,4 +1208,8 @@
  }
  
 +#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
@@ -4182,8 +4157,7 @@ index 30801ea..0fd8fad 100644
 +#endif
  SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
  {
- 	struct new_utsname tmp;
- 
+@@ -1214,4 +1214,8 @@
  	down_read(&uts_sem);
  	memcpy(&tmp, utsname(), sizeof(tmp));
 +#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
@@ -4192,13 +4166,11 @@ index 30801ea..0fd8fad 100644
 +#endif
  	up_read(&uts_sem);
  	if (copy_to_user(name, &tmp, sizeof(tmp)))
- 		return -EFAULT;
 diff --git a/mm/memory.c b/mm/memory.c
 index 0879df7..23c4b11 100644
 --- a/mm/memory.c
 +++ b/mm/memory.c
-@@ -79,6 +79,10 @@
- #include <asm/tlbflush.h>
+@@ -82,4 +82,8 @@
  #include <asm/pgtable.h>
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MAP
@@ -4207,7 +4179,6 @@ index 0879df7..23c4b11 100644
 +
  #include "internal.h"
  
- #define CREATE_TRACE_POINTS
 @@ -5087,12 +5091,20 @@ int __access_remote_vm(struct task_struct *tsk, struct mm_struct *mm,
  	int write = gup_flags & FOLL_WRITE;
  
