@@ -23,6 +23,14 @@ on:
         required: false
         default: false
         type: boolean
+      nomount_netlink_proto:
+        description: NoMount Netlink protocol (requires matching nm userspace client)
+        required: false
+        default: "29"
+        type: choice
+        options:
+          - "29"
+          - "28"
       localversion:
         description: Extra LOCALVERSION suffix
         required: false
@@ -39,6 +47,7 @@ env:
   KBUILD_BUILD_HOST: github-actions
   BUILD_VARIANT: ${{ inputs.variant || 'bakasu_susfs_nomount' }}
   ENABLE_BORE: ${{ inputs.enable_bore && 'true' || 'false' }}
+  NOMOUNT_NETLINK_PROTO: ${{ inputs.nomount_netlink_proto || '29' }}
 
 jobs:
   build:
@@ -93,12 +102,37 @@ jobs:
         run: |
           set -euxo pipefail
           git clone --depth=1 https://github.com/Bouteillepleine/NoMount-Suite.git /tmp/nomount-suite
+          # The kernel and the userspace nm helper MUST share the same Netlink protocol.
+          # Default 29 is unchanged for push builds. Protocol 28 is experimental/manual only.
+          if [[ "$NOMOUNT_NETLINK_PROTO" == "28" ]]; then
+            for hdr in /tmp/nomount-suite/hookless/src/nomount.h /tmp/nomount-suite/userspace/src/nm.h; do
+              sed -i -E "s/(#define NOMOUNT_NL_PROTO[[:space:]]+)29$/\\1$NOMOUNT_NETLINK_PROTO/" "$hdr"
+            done
+            # Build a matching, freestanding AArch64 nm helper for the NoMount module.
+            ../clang/bin/clang --target=aarch64-linux-android26 -Oz -static -nostdlib \\
+              -fuse-ld=lld -ffreestanding -fno-unwind-tables -fno-ident \\
+              -Wno-invalid-noreturn -Wl,--entry=_start \\
+              /tmp/nomount-suite/userspace/src/nm.c \\
+              -o "nomount-nm-proto${NOMOUNT_NETLINK_PROTO}-arm64"
+            readelf -h "nomount-nm-proto${NOMOUNT_NETLINK_PROTO}-arm64" | grep -q 'AArch64'
+          fi
+          for hdr in /tmp/nomount-suite/hookless/src/nomount.h /tmp/nomount-suite/userspace/src/nm.h; do
+            grep -qE "^#define NOMOUNT_NL_PROTO[[:space:]]+$NOMOUNT_NETLINK_PROTO$" "$hdr"
+          done
           cp /tmp/nomount-suite/hookless/src/nomount.c fs/nomount.c
           cp /tmp/nomount-suite/hookless/src/nomount.h fs/nomount.h
           patch -p1 --fuzz=3 < /tmp/nomount-suite/hookless/patches/nomount_kernel_integration.patch
           grep -q 'config NOMOUNT' fs/Kconfig
           grep -q 'CONFIG_NOMOUNT' fs/Makefile
           grep -q 'vfs_map_meta_override' fs/proc/task_mmu.c
+
+      - name: Upload matching NoMount client
+        if: contains(env.BUILD_VARIANT, 'nomount') && env.NOMOUNT_NETLINK_PROTO == '28'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nomount-nm-proto28-${{ github.run_number }}
+          path: nomount-nm-proto28-arm64
+          if-no-files-found: error
 
       - name: Generate config
         run: |
