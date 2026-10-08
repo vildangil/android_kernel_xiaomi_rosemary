@@ -1,0 +1,102 @@
+name: Build NoMount Suite module (Netlink 28)
+
+on:
+  push:
+    branches: [rosemary-r-oss]
+    paths:
+      - '.github/workflows/build-nomount-proto28.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  module:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Prepare toolchain
+        run: |
+          set -euxo pipefail
+          clang --version
+          ld.lld --version
+          python3 --version
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq unzip zip
+
+      - name: Fetch pinned NoMount Suite v1.3.197
+        run: |
+          set -euxo pipefail
+          git clone --depth=1 --branch v1.3.197 https://github.com/Bouteillepleine/NoMount-Suite.git nomount-suite
+          curl -fL --retry 3 --output NoMount-original.zip \
+            https://github.com/Bouteillepleine/NoMount-Suite/releases/download/v1.3.197/00_NoMount-Module-v1.3.197.zip
+          unzip -t NoMount-original.zip | tail -n 2
+          grep -qE '^#define NOMOUNT_NL_PROTO[[:space:]]+29$' nomount-suite/userspace/src/nm.h
+
+      - name: Recompile nm helper for Netlink protocol 28
+        run: |
+          set -euxo pipefail
+          sed -i -E 's/(#define NOMOUNT_NL_PROTO[[:space:]]+)29$/\128/' nomount-suite/userspace/src/nm.h
+          grep -qE '^#define NOMOUNT_NL_PROTO[[:space:]]+28$' nomount-suite/userspace/src/nm.h
+          clang --target=aarch64-linux-gnu -Oz -static -nostdlib -fuse-ld=lld \
+            -ffreestanding -fno-unwind-tables -fno-ident -Wno-invalid-noreturn \
+            -Wl,--entry=_start nomount-suite/userspace/src/nm.c -o nm-arm64-proto28
+          readelf -h nm-arm64-proto28 | grep 'Machine:.*AArch64'
+          file nm-arm64-proto28
+
+      - name: Replace nm in official ZIP and update installer integrity manifest
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          original = Path("NoMount-original.zip")
+          out = Path("00_NoMount-Module-v1.3.197-Netlink28.zip")
+          nm = Path("nm-arm64-proto28").read_bytes()
+          nm_path = "bin/arm64-v8a/nm"
+          sums_path = "nomount.sha256sums"
+
+          with zipfile.ZipFile(original) as zin:
+              entries = [(info, zin.read(info)) for info in zin.infolist()]
+          names = [info.filename for info, _ in entries]
+          assert nm_path in names, f"{nm_path} absent from original ZIP"
+          assert sums_path in names, f"{sums_path} absent from original ZIP"
+
+          old_sums = next(data for info, data in entries if info.filename == sums_path).decode("utf-8")
+          new_lines = []
+          changed = 0
+          for line in old_sums.splitlines():
+              parts = line.split("  ", 1)
+              if len(parts) == 2 and parts[1] == nm_path:
+                  line = hashlib.sha256(nm).hexdigest() + "  " + nm_path
+                  changed += 1
+              new_lines.append(line)
+          assert changed == 1, "Expected exactly one nm checksum entry"
+
+          with zipfile.ZipFile(out, "w") as zout:
+              for info, data in entries:
+                  if info.filename == nm_path:
+                      data = nm
+                  elif info.filename == sums_path:
+                      data = ("\n".join(new_lines) + "\n").encode("utf-8")
+                  zout.writestr(info, data)
+
+          with zipfile.ZipFile(out) as check:
+              assert check.testzip() is None
+              assert check.read(nm_path) == nm
+              assert check.read(sums_path).decode().count(nm_path) == 1
+          print(f"Created {out}: {out.stat().st_size} bytes")
+          PY
+          mkdir -p verified
+          unzip -q 00_NoMount-Module-v1.3.197-Netlink28.zip -d verified
+          (cd verified && sha256sum -c nomount.sha256sums)
+          sha256sum 00_NoMount-Module-v1.3.197-Netlink28.zip
+
+      - name: Upload installable NoMount Suite module
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoMount-Suite-v1.3.197-Netlink28
+          path: 00_NoMount-Module-v1.3.197-Netlink28.zip
+          if-no-files-found: error
