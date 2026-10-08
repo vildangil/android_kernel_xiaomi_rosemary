@@ -18,6 +18,11 @@ on:
           - resukisu_nomount
           - bakasu_susfs
           - bakasu_susfs_nomount
+      enable_bore:
+        description: Enable experimental BORE scheduler 5.1.0
+        required: false
+        default: false
+        type: boolean
       localversion:
         description: Extra LOCALVERSION suffix
         required: false
@@ -33,6 +38,7 @@ env:
   KBUILD_BUILD_USER: vildangil
   KBUILD_BUILD_HOST: github-actions
   BUILD_VARIANT: ${{ inputs.variant || 'bakasu_susfs_nomount' }}
+  ENABLE_BORE: ${{ inputs.enable_bore && 'true' || 'false' }}
 
 jobs:
   build:
@@ -98,6 +104,11 @@ jobs:
         run: |
           set -euxo pipefail
           make O=out ARCH=arm64 "$DEFCONFIG"
+          if [[ "$ENABLE_BORE" == "true" ]]; then
+            scripts/config --file out/.config -e SCHED_BORE
+          else
+            scripts/config --file out/.config -d SCHED_BORE
+          fi
 
           if [[ "$BUILD_VARIANT" != "stock" ]]; then
             scripts/config --file out/.config -e KSU -e KSU_MANUAL_HOOK -e KALLSYMS -e DEBUG_KERNEL -e KALLSYMS_ALL
@@ -120,7 +131,10 @@ jobs:
 
           make O=out ARCH=arm64 olddefconfig
           echo "===== important config ====="
-          grep -E 'CONFIG_(KSU|KSU_MANUAL_HOOK|KSU_SUSFS|NOMOUNT|KALLSYMS_ALL|LOCALVERSION)=' out/.config || true
+          grep -E 'CONFIG_(KSU|KSU_MANUAL_HOOK|KSU_SUSFS|SCHED_BORE|NOMOUNT|KALLSYMS_ALL|LOCALVERSION)=' out/.config || true
+          if [[ "$ENABLE_BORE" == "true" ]]; then
+            grep -qx 'CONFIG_SCHED_BORE=y' out/.config
+          fi
           if [[ "$BUILD_VARIANT" != "stock" ]]; then
             grep -qx 'CONFIG_KSU=y' out/.config
             grep -qx 'CONFIG_KALLSYMS_ALL=y' out/.config
