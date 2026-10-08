@@ -1,5 +1,5 @@
 name: Build Redmi Note 10S R-vendor kernel
-run-name: "Rosemary R | ${{ inputs.variant || 'bakasu_susfs' }} | ${{ github.event_name }}"
+run-name: "Rosemary R | ${{ inputs.variant || 'bakasu_susfs_nomount' }} | ${{ github.event_name }}"
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       variant:
         description: Build variant
         required: true
-        default: bakasu_susfs
+        default: bakasu_susfs_nomount
         type: choice
         options:
           - stock
@@ -32,7 +32,7 @@ env:
   DEFCONFIG: rosemary_defconfig
   KBUILD_BUILD_USER: vildangil
   KBUILD_BUILD_HOST: github-actions
-  BUILD_VARIANT: ${{ inputs.variant || 'bakasu_susfs' }}
+  BUILD_VARIANT: ${{ inputs.variant || 'bakasu_susfs_nomount' }}
 
 jobs:
   build:
