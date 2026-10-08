@@ -18,11 +18,11 @@ jobs:
       - name: Prepare toolchain
         run: |
           set -euxo pipefail
-          clang --version
-          ld.lld --version
           python3 --version
           sudo apt-get update -qq
-          sudo apt-get install -y -qq unzip zip
+          sudo apt-get install -y -qq clang lld unzip zip
+          clang --version
+          ld.lld --version
 
       - name: Fetch pinned NoMount Suite v1.3.197
         run: |
