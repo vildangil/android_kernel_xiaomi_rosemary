@@ -59,6 +59,8 @@ jobs:
           set -euxo pipefail
           curl -fLSs https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh -o /tmp/bakasu-setup.sh
           bash /tmp/bakasu-setup.sh
+          git apply --check .github/patches/bakasu-susfs-rosemary-sucompat.patch
+          git apply .github/patches/bakasu-susfs-rosemary-sucompat.patch
           test -f drivers/kernelsu/Kconfig
           grep -q 'CONFIG_KSU' drivers/Makefile
           git apply --check .github/patches/bakasu-manual-hooks-4.14.patch
@@ -71,6 +73,9 @@ jobs:
           # Fail on rejects, don't silently claim a working SUSFS port.
           git apply --check .github/patches/susfs-2.3.0-rosemary.patch
           git apply .github/patches/susfs-2.3.0-rosemary.patch
+          for item in 'kernel/sys.c:ksu_handle_setresuid' 'fs/read_write.c:ksu_handle_sys_read' 'drivers/input/input.c:ksu_handle_input_handle_event' 'fs/exec.c:ksu_handle_execveat' 'fs/open.c:ksu_handle_faccessat' 'fs/stat.c:ksu_handle_stat' 'kernel/reboot.c:ksu_handle_sys_reboot'; do
+            grep -q "${item#*:}" "${item%%:*}" || { echo "Missing inline hook: $item"; exit 1; }
+          done
           test -s fs/susfs.c
           test -s include/linux/susfs.h
           test -s include/linux/susfs_def.h

@@ -5,7 +5,7 @@ diff --git a/fs/exec.c b/fs/exec.c
  /*
   * sys_execve() executes a new program.
   */
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
 +				void *argv, void *envp, int *flags);
 +extern int ksu_handle_post_execveat(int *fd,
@@ -21,7 +21,7 @@ diff --git a/fs/exec.c b/fs/exec.c
  	struct files_struct *displaced;
  	int retval;
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 +#endif
 +
@@ -32,7 +32,7 @@ diff --git a/fs/exec.c b/fs/exec.c
  	task_numa_free(current, false);
  	free_bprm(bprm);
  	kfree(pathbuf);
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +	ksu_handle_post_execveat(&fd, &filename, &argv, &envp, &flags, &retval);
 +#endif
  	putname(filename);
@@ -42,7 +42,7 @@ diff --git a/fs/exec.c b/fs/exec.c
  	if (displaced)
  		reset_files_struct(displaced);
  out_ret:
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +	ksu_handle_post_execveat(&fd, &filename, &argv, &envp, &flags, &retval);
 +#endif
  	putname(filename);
@@ -56,7 +56,7 @@ diff --git a/fs/open.c b/fs/open.c
  	return error;
  }
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +extern int ksu_handle_faccessat(int *dfd,
 +				const char __user **filename_user,
 +				int *mode, int *flags);
@@ -69,7 +69,7 @@ diff --git a/fs/open.c b/fs/open.c
  	int res;
  	unsigned int lookup_flags = LOOKUP_FOLLOW;
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 +#endif
 +
@@ -80,13 +80,15 @@ diff --git a/fs/open.c b/fs/open.c
 diff --git a/fs/stat.c b/fs/stat.c
 --- a/fs/stat.c
 +++ b/fs/stat.c
-@@ -19,6 +19,17 @@
+@@ -19,6 +19,19 @@
  #include <linux/uaccess.h>
  #include <asm/unistd.h>
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +extern int ksu_handle_stat(int *dfd,
 +			   const char __user **filename_user, int *flags);
++#endif
++#ifdef CONFIG_KSU_MANUAL_HOOK
 +extern void ksu_handle_newfstat_ret(unsigned int *fd,
 +				    struct stat __user **statbuf_ptr);
 +#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
@@ -102,7 +104,7 @@ diff --git a/fs/stat.c b/fs/stat.c
  	struct kstat stat;
  	int error;
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +	ksu_handle_stat(&dfd, &filename, &flag);
 +#endif
 +
@@ -141,7 +143,7 @@ diff --git a/fs/stat.c b/fs/stat.c
  	struct kstat stat;
  	int error;
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +	ksu_handle_stat(&dfd, &filename, &flag);
 +#endif
 +
@@ -156,7 +158,7 @@ diff --git a/kernel/reboot.c b/kernel/reboot.c
  
  static DEFINE_MUTEX(reboot_mutex);
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +extern int ksu_handle_sys_reboot(int magic1, int magic2,
 +				 unsigned int cmd, void __user **arg);
 +#endif
@@ -168,7 +170,7 @@ diff --git a/kernel/reboot.c b/kernel/reboot.c
  	char buffer[256];
  	int ret = 0;
  
-+#ifdef CONFIG_KSU_MANUAL_HOOK
++#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 +	(void)ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
 +#endif
 +
