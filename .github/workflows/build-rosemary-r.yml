@@ -52,7 +52,7 @@ jobs:
           echo "$PWD/../clang/bin" >> "$GITHUB_PATH"
 
       - name: Integrate BakaSU manual hooks
-        if: (inputs.variant || 'stock') != 'stock'
+        if: (inputs.variant || 'bakasu_susfs') != 'stock'
         run: |
           set -euxo pipefail
           curl -fLSs https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh -o /tmp/bakasu-setup.sh
@@ -63,19 +63,20 @@ jobs:
           git apply .github/patches/bakasu-manual-hooks-4.14.patch
 
       - name: Integrate SUSFS 2.3.0 from Evolution patch
-        if: contains(inputs.variant, 'susfs')
+        if: contains(inputs.variant || 'bakasu_susfs', 'susfs')
         run: |
           set -euxo pipefail
           # Fail on rejects, don't silently claim a working SUSFS port.
-          git apply --check .github/patches/susfs-2.3.0-evolution.patch
-          git apply .github/patches/susfs-2.3.0-evolution.patch
+          git apply --check .github/patches/susfs-2.3.0-rosemary.patch
+          git apply .github/patches/susfs-2.3.0-rosemary.patch
           test -s fs/susfs.c
           test -s include/linux/susfs.h
           test -s include/linux/susfs_def.h
+          grep -Fxq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
 
 
       - name: Integrate NoMount
-        if: contains(inputs.variant, 'nomount')
+        if: contains(inputs.variant || 'bakasu_susfs', 'nomount')
         run: |
           set -euxo pipefail
           git clone --depth=1 https://github.com/Bouteillepleine/NoMount-Suite.git /tmp/nomount-suite
@@ -91,18 +92,18 @@ jobs:
           set -euxo pipefail
           make O=out ARCH=arm64 "$DEFCONFIG"
 
-          if [[ "${{ inputs.variant || 'stock' }}" != "stock" ]]; then
+          if [[ "${{ inputs.variant || 'bakasu_susfs' }}" != "stock" ]]; then
             scripts/config --file out/.config -e KSU -e KSU_MANUAL_HOOK -e KALLSYMS -e DEBUG_KERNEL -e KALLSYMS_ALL
           fi
 
-          if [[ "${{ inputs.variant || 'stock' }}" == *susfs* ]]; then
+          if [[ "${{ inputs.variant || 'bakasu_susfs' }}" == *susfs* ]]; then
             scripts/config --file out/.config -d KSU_MANUAL_HOOK -e KSU_SUSFS
             for opt in KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
               scripts/config --file out/.config -e "$opt"
             done
           fi
 
-          if [[ "${{ inputs.variant || 'stock' }}" == *nomount* ]]; then
+          if [[ "${{ inputs.variant || 'bakasu_susfs' }}" == *nomount* ]]; then
             scripts/config --file out/.config -e NOMOUNT
           fi
 
@@ -113,18 +114,18 @@ jobs:
           make O=out ARCH=arm64 olddefconfig
           echo "===== important config ====="
           grep -E 'CONFIG_(KSU|KSU_MANUAL_HOOK|KSU_SUSFS|NOMOUNT|KALLSYMS_ALL|LOCALVERSION)=' out/.config || true
-          if [[ "${{ inputs.variant || 'stock' }}" != "stock" ]]; then
+          if [[ "${{ inputs.variant || 'bakasu_susfs' }}" != "stock" ]]; then
             grep -qx 'CONFIG_KSU=y' out/.config
             grep -qx 'CONFIG_KALLSYMS_ALL=y' out/.config
           fi
-          if [[ "${{ inputs.variant || 'stock' }}" == *susfs* ]]; then
+          if [[ "${{ inputs.variant || 'bakasu_susfs' }}" == *susfs* ]]; then
             grep -qx 'CONFIG_KSU_SUSFS=y' out/.config
           else
-            if [[ "${{ inputs.variant || 'stock' }}" != "stock" ]]; then
+            if [[ "${{ inputs.variant || 'bakasu_susfs' }}" != "stock" ]]; then
               grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' out/.config
             fi
           fi
-          if [[ "${{ inputs.variant || 'stock' }}" == *nomount* ]]; then
+          if [[ "${{ inputs.variant || 'bakasu_susfs' }}" == *nomount* ]]; then
             grep -qx 'CONFIG_NOMOUNT=y' out/.config
           fi
 
@@ -172,14 +173,14 @@ jobs:
 
           VERSION="$(make kernelversion)"
           SHORT_SHA="$(git rev-parse --short=8 HEAD)"
-          ZIP="rosemary-R-${{ inputs.variant || 'stock' }}-${VERSION}-${SHORT_SHA}.zip"
+          ZIP="rosemary-R-${{ inputs.variant || 'bakasu_susfs' }}-${VERSION}-${SHORT_SHA}.zip"
           (cd AnyKernel3 && zip -r9 "../$ZIP" . -x '*.git*' 'README.md')
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
       - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
-          name: rosemary-R-${{ inputs.variant || 'stock' }}-${{ github.run_number }}
+          name: rosemary-R-${{ inputs.variant || 'bakasu_susfs' }}-${{ github.run_number }}
           path: |
             ${{ env.ZIP }}
             build.log
