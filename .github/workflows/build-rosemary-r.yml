@@ -109,10 +109,10 @@ jobs:
               sed -i -E "s/(#define NOMOUNT_NL_PROTO[[:space:]]+)29$/\\1$NOMOUNT_NETLINK_PROTO/" "$hdr"
             done
             # Build a matching, freestanding AArch64 nm helper for the NoMount module.
-            ../clang/bin/clang --target=aarch64-linux-android26 -Oz -static -nostdlib \\
-              -fuse-ld=lld -ffreestanding -fno-unwind-tables -fno-ident \\
-              -Wno-invalid-noreturn -Wl,--entry=_start \\
-              /tmp/nomount-suite/userspace/src/nm.c \\
+            ../clang/bin/clang --target=aarch64-linux-android26 -Oz -static -nostdlib \
+              -fuse-ld=lld -ffreestanding -fno-unwind-tables -fno-ident \
+              -Wno-invalid-noreturn -Wl,--entry=_start \
+              /tmp/nomount-suite/userspace/src/nm.c \
               -o "nomount-nm-proto${NOMOUNT_NETLINK_PROTO}-arm64"
             readelf -h "nomount-nm-proto${NOMOUNT_NETLINK_PROTO}-arm64" | grep -q 'AArch64'
           fi
