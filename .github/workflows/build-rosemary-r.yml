@@ -164,6 +164,8 @@ jobs:
           fi
 
           make O=out ARCH=arm64 olddefconfig
+          # Required by MediaTek vendor Bluetooth HAL: /dev/stpbt is created by bt_drv.
+          grep -qx 'CONFIG_MTK_COMBO_BT=y' out/.config
           echo "===== important config ====="
           grep -E 'CONFIG_(KSU|KSU_MANUAL_HOOK|KSU_SUSFS|SCHED_BORE|NOMOUNT|KALLSYMS_ALL|LOCALVERSION)=' out/.config || true
           if [[ "$ENABLE_BORE" == "true" ]]; then
@@ -207,6 +209,9 @@ jobs:
           set -eux
           ls -lah out/arch/arm64/boot/
           test -f out/arch/arm64/boot/Image.gz || test -f out/arch/arm64/boot/Image.gz-dtb || test -f out/arch/arm64/boot/Image
+          # Verify that the Bluetooth driver providing /dev/stpbt was compiled.
+          test -f out/drivers/misc/mediatek/connectivity/bt/mt66xx/legacy/bt_drv.o
+          test -f out/drivers/misc/mediatek/connectivity/bt/mt66xx/legacy/stp_chrdev_bt.o
 
       - name: Pack AnyKernel3
         run: |
